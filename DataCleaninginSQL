@@ -1,1 +1,206 @@
+-- Data Cleaning
+
+SELECT *
+FROM layoffs;
+
+-- 1. remove duplicates
+-- 2. standardize data
+-- 3. Null Values or blank values
+-- 4. remove any columns
+
+-- create another table for staging, original is raw
+
+CREATE TABLE layoffs_staging
+LIKE layoffs;
+
+SELECT *
+FROM layoffs_staging;
+
+-- now insert data into staging
+
+INSERT layoffs_staging
+SELECT *
+FROM layoffs;
+
+-- remove duplicates
+SELECT *, 
+ROW_NUMBER() OVER(
+PARTITION BY company, industry, total_laid_off, percentage_laid_off, `date`) AS row_num
+FROM layoffs_staging
+;
+
+WITH duplicate_cte AS
+(
+SELECT *, 
+ROW_NUMBER() OVER(
+PARTITION BY company, location, industry, total_laid_off, percentage_laid_off, `date`, stage, country, funds_raised_millions) AS row_num
+FROM layoffs_staging
+)
+SELECT *
+FROM duplicate_cte
+WHERE row_num > 1;
+
+SELECT *
+FROM layoffs_staging
+WHERE company = 'Casper';
+
+-- deleting the duplicates(cannot update on cte)
+-- create table 
+
+CREATE TABLE `layoffs_staging2` (
+  `company` text,
+  `location` text,
+  `industry` text,
+  `total_laid_off` int DEFAULT NULL,
+  `percentage_laid_off` text,
+  `date` text,
+  `stage` text,
+  `country` text,
+  `funds_raised_millions` int DEFAULT NULL,
+  `row_num` INT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+INSERT INTO layoffs_staging2
+SELECT *, 
+ROW_NUMBER() OVER(
+PARTITION BY company, location, industry, total_laid_off, percentage_laid_off, `date`, stage, country, funds_raised_millions) AS row_num
+FROM layoffs_staging;
+
+SELECT *
+FROM layoffs_staging2
+WHERE row_num > 1;
+-- turn off safe update mode
+SET SQL_SAFE_UPDATES = 0;
+
+-- delete the duplicates
+DELETE
+FROM layoffs_staging2
+WHERE row_num > 1;
+
+-- check that the duplicates were deleted
+SELECT *
+FROM layoffs_staging2;
+
+-- step 2: standardizing Data
+-- example included health has a space before it = trim
+
+SELECT company, TRIM(company)
+FROM layoffs_staging2;
+
+UPDATE layoffs_staging2
+SET company = TRIM(company);
+
+-- industry order by the first column (need to change crypto, cryptocurrency, crypto currency)
+SELECT DISTINCT industry
+FROM layoffs_staging2
+ORDER BY 1;
+
+-- see what is most common... crypto is most common
+SELECT *
+FROM layoffs_staging2
+WHERE industry LIKE 'Crypto%';
+
+-- update the three rows to be Crypto
+UPDATE layoffs_staging2
+SET industry = 'Crypto'
+WHERE industry LIKE 'Crypto%';
+
+SELECT DISTINCT industry
+FROM layoffs_staging2
+;
+
+
+-- look through columns
+SELECT DISTINCT country
+FROM layoffs_staging2
+ORDER BY 1;
+
+-- united states and united states.
+
+SELECT DISTINCT country, TRIM(TRAILING '.' FROM country)
+FROM layoffs_staging2
+ORDER BY 1;
+
+UPDATE layoffs_staging2
+SET country = TRIM(TRAILING '.' FROM country)
+WHERE country LIKE 'United States%';
+
+-- CHANGE DATE TO DATE COLUMN NOT TEXT
+
+SELECT `date`,
+STR_TO_DATE(`date`, '%m/%d/%Y')
+FROM layoffs_staging2;
+
+UPDATE layoffs_staging2
+SET `date` = STR_TO_DATE(`date`, '%m/%d/%Y');
+
+SELECT `date`
+FROM layfunds_raised_millionsoffs_staging2;
+
+-- change to date column (only do this in a staging)
+
+ALTER TABLE layoffs_staging2
+MODIFY COLUMN `date` DATE;
+
+SELECT *
+FROM layoffs_staging2;
+
+-- step 3 nulls and blanks
+UPDATE layoffs_staging2
+SET industry = NULL
+WHERE industry = '';
+
+
+SELECT *
+FROM layoffs_staging2
+WHERE industry IS NULL
+OR INDUSTRY = '';
+
+SELECT *
+FROM layoffs_staging2
+WHERE company = 'Airbnb';
+ -- travel industry
+ 
+SELECT *
+FROM layoffs_staging2 t1
+JOIN layoffs_staging2 t2
+	ON t1.company = t2.company
+WHERE (t1.industry IS NULL OR t1.industry = '')
+AND t2.industry IS NOT NULL
+;
+
+UPDATE layoffs_staging2 t1
+JOIN layoffs_staging2 t2
+	ON t1.company = t2.company
+SET t1.industry = t2.industry
+WHERE (t1.industry IS NULL OR t1.industry = '')
+AND t2.industry IS NOT NULL;
+
+SELECT *
+FROM layoffs_staging2;
+
+-- total laid off and percentage laid off and funds raised leave null 
+
+-- step 4 remove columns and rows that we need to
+-- be careful with what you delete
+SELECT *
+FROM layoffs_staging2
+WHERE total_laid_off IS NULL
+AND percentage_laid_off IS NULL;
+
+DELETE
+FROM layoffs_staging2
+WHERE total_laid_off IS NULL
+AND percentage_laid_off IS NULL;
+
+
+ALTER TABLE layoffs_staging2
+DROP COLUMN row_num;
+
+-- DATA IS CLEANED!
+
+
+
+
 
